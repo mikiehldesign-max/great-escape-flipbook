@@ -27,24 +27,32 @@
   }
 
   /*
-   * #clip-box  – clips to exactly one page wide on covers,
-   *               or two pages wide on spreads.
-   * #flipbook-wrapper  – contains the StPageFlip canvas (always 2×pageSize).
-   *                       We shift it left/right to show the right half on covers.
+   * #clip-box clips to pageSize (cover) or 2×pageSize (spread).
+   * #flipbook-wrapper holds the StPageFlip canvas (always 2×pageSize wide).
+   *
+   * Canvas layout (landscape + showCover):
+   *   front cover → drawn on the RIGHT half of the canvas
+   *   spreads     → drawn across the full canvas
+   *   back cover  → drawn on the LEFT  half of the canvas
+   *
+   * To show only the front cover:
+   *   clip-box = pageSize wide
+   *   wrapper  = translateX(-pageSize)  → right half scrolls into view
+   *
+   * To show a spread:
+   *   clip-box = 2×pageSize wide
+   *   wrapper  = translateX(0)          → full canvas visible
+   *
+   * To show only the back cover:
+   *   clip-box = pageSize wide
+   *   wrapper  = translateX(0)          → left half is the back cover
    */
   #clip-box {
     overflow: hidden;
-    /* width & height set by JS to match the current state */
-    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     filter: drop-shadow(0 20px 50px rgba(0,0,0,0.9));
   }
-
-  #flipbook-wrapper {
-    /* shifted by JS: -pageSize on cover, 0 on spread, +pageSize on back */
-    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  #flipbook { display: block; }
+  #flipbook-wrapper { display: block; }
+  #flipbook         { display: block; }
 
   /* Controls */
   #controls {
@@ -53,7 +61,6 @@
     gap: 16px;
     user-select: none;
   }
-
   .ctrl-btn {
     background: rgba(255,255,255,0.1);
     border: 1px solid rgba(255,255,255,0.2);
@@ -95,7 +102,6 @@
     transition: opacity 0.6s ease;
   }
   #loader.hidden { opacity: 0; pointer-events: none; }
-
   .spinner {
     width: 40px; height: 40px;
     border: 3px solid rgba(255,255,255,0.12);
@@ -139,68 +145,44 @@
 <script>
 (function () {
 
-  /*
-   * Layout logic:
-   *   Page 0        = front cover (single, StPageFlip places it on the RIGHT)
-   *   Pages 1..16   = interior    (two-page spread)
-   *   Page 17       = back cover  (single, StPageFlip places it on the LEFT)
-   *
-   * The StPageFlip canvas is always 2×pageSize wide (landscape mode).
-   * We use a clip-box that is:
-   *   • pageSize wide  for covers  → shows only one page
-   *   • 2×pageSize wide for spreads → shows both pages
-   * And we shift the wrapper:
-   *   • translateX(-pageSize) for the front cover (reveals right half)
-   *   • translateX(0)          for spreads
-   *   • translateX(+pageSize) for the back cover  (reveals left half)
-   *
-   * The clip-box and wrapper transitions are synchronised so the
-   * opening/closing feels like the book spreading open.
-   */
-
   var BASE  = 'https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
   var pages = [];
   for (var i = 1; i <= 18; i++) {
     var n = String(i).padStart(2, '0');
     pages.push(BASE + 'great_escape_2013_book_hi__Page_' + n + '.jpg');
   }
-  var TOTAL = pages.length; // 18
-  var pageSize = 0;         // set after calcPageSize()
+  var TOTAL    = pages.length; // 18
+  var pageSize = 0;
 
-  /* ---- sizing ---------------------------------------------------------- */
+  /* ---- sizing ---- */
   function calcPageSize() {
     var vw = window.innerWidth  - 48;
     var vh = window.innerHeight - 100;
-    var byW = Math.floor(vw / 2);
-    var byH = Math.floor(vh);
-    var ps  = Math.min(byW, byH, 500);
+    var ps = Math.min(Math.floor(vw / 2), Math.floor(vh), 500);
     return Math.max(ps, 120);
   }
 
-  /* ---- preload --------------------------------------------------------- */
+  /* ---- preload ---- */
   var loadedCount = 0;
   function preload(done) {
     pages.forEach(function(src) {
       var img = new Image();
-      img.onload = img.onerror = function() {
-        if (++loadedCount >= TOTAL) done();
-      };
+      img.onload = img.onerror = function() { if (++loadedCount >= TOTAL) done(); };
       img.src = src;
     });
   }
 
   preload(init);
 
-  /* ---- init ------------------------------------------------------------ */
+  /* ---- init ---- */
   var pageFlip;
 
   function init() {
     document.getElementById('loader').classList.add('hidden');
-
     pageSize = calcPageSize();
 
-    /* Set initial clip-box to single-page (cover) */
-    applyClip(0, false /* no animation on load */);
+    /* Initialise clip without animation */
+    setClip(0, false);
 
     pageFlip = new St.PageFlip(
       document.getElementById('flipbook'),
@@ -238,42 +220,38 @@
     window.addEventListener('resize', function() {
       pageSize = calcPageSize();
       pageFlip.update({ width: pageSize, height: pageSize });
-      /* re-apply clip without animation so it snaps to the new size */
-      var cur = pageFlip.getCurrentPageIndex();
-      applyClip(cur, false);
+      setClip(pageFlip.getCurrentPageIndex(), false);
     });
   }
 
-  /* ---- apply clip-box + wrapper shift ---------------------------------- */
-  function applyClip(cur, animate) {
-    var clipBox  = document.getElementById('clip-box');
-    var wrapper  = document.getElementById('flipbook-wrapper');
-    var easing   = animate
-      ? 'transition: width 0.5s cubic-bezier(0.4,0,0.2,1), transform 0.5s cubic-bezier(0.4,0,0.2,1);'
-      : 'transition: none;';
+  /* ---- setClip ---- */
+  function setClip(cur, animate) {
+    var clipBox = document.getElementById('clip-box');
+    var wrapper = document.getElementById('flipbook-wrapper');
+    var T       = animate ? '0.55s cubic-bezier(0.4,0,0.2,1)' : '0s';
 
     if (cur === 0) {
-      /* Front cover: right half of canvas */
-      clipBox.style.cssText  = 'overflow:hidden; width:' + pageSize + 'px; height:' + pageSize + 'px;';
-      wrapper.style.cssText  = 'transform: translateX(-' + pageSize + 'px);';
+      /* Front cover: right half of canvas. Shift wrapper left so right half aligns. */
+      clipBox.style.width      = pageSize + 'px';
+      clipBox.style.height     = pageSize + 'px';
+      wrapper.style.transform  = 'translateX(-' + pageSize + 'px)';
     } else if (cur >= TOTAL - 1) {
-      /* Back cover: left half of canvas */
-      clipBox.style.cssText  = 'overflow:hidden; width:' + pageSize + 'px; height:' + pageSize + 'px;';
-      wrapper.style.cssText  = 'transform: translateX(0px);';
+      /* Back cover: left half of canvas. No shift needed. */
+      clipBox.style.width      = pageSize + 'px';
+      clipBox.style.height     = pageSize + 'px';
+      wrapper.style.transform  = 'translateX(0)';
     } else {
-      /* Interior spread: full canvas */
-      clipBox.style.cssText  = 'overflow:hidden; width:' + (pageSize * 2) + 'px; height:' + pageSize + 'px;';
-      wrapper.style.cssText  = 'transform: translateX(-' + pageSize + 'px);';
+      /* Interior spread: show full canvas. */
+      clipBox.style.width      = (pageSize * 2) + 'px';
+      clipBox.style.height     = pageSize + 'px';
+      wrapper.style.transform  = 'translateX(0)';
     }
 
-    if (animate) {
-      /* Add transitions after setting initial positions */
-      clipBox.style.transition  = 'width 0.5s cubic-bezier(0.4,0,0.2,1)';
-      wrapper.style.transition  = 'transform 0.5s cubic-bezier(0.4,0,0.2,1)';
-    }
+    clipBox.style.transition  = 'width '     + T + ', height ' + T;
+    wrapper.style.transition  = 'transform ' + T;
   }
 
-  /* ---- flip / state handler ------------------------------------------- */
+  /* ---- onFlip ---- */
   function onFlip() {
     var cur  = pageFlip.getCurrentPageIndex();
     var btnP = document.getElementById('btn-prev');
@@ -283,7 +261,7 @@
     btnP.disabled = (cur <= 0);
     btnN.disabled = (cur >= TOTAL - 1);
 
-    applyClip(cur, true);
+    setClip(cur, true);
 
     if (cur === 0) {
       ind.textContent = 'Front Cover';
