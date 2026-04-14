@@ -7,8 +7,9 @@
 <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    background: #1a1a1a;
+    background: #111;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -17,89 +18,103 @@
     font-family: Georgia, serif;
     overflow: hidden;
   }
+
   #book-container {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 24px;
+    gap: 20px;
   }
+
   #flipbook-wrapper {
-    filter: drop-shadow(0 30px 60px rgba(0,0,0,0.8));
+    filter: drop-shadow(0 20px 50px rgba(0,0,0,0.9));
   }
+
   #flipbook { display: block; }
+
+  /* Controls */
   #controls {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
     user-select: none;
   }
+
   .ctrl-btn {
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
     color: #fff;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
-    font-size: 18px;
+    font-size: 16px;
     cursor: pointer;
     transition: background 0.2s, transform 0.15s;
     display: flex;
     align-items: center;
     justify-content: center;
-    line-height: 1;
   }
-  .ctrl-btn:hover { background: rgba(255,255,255,0.22); transform: scale(1.1); }
-  .ctrl-btn:active { transform: scale(0.95); }
-  .ctrl-btn:disabled { opacity: 0.3; cursor: default; transform: none; }
+  .ctrl-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.08); }
+  .ctrl-btn:active { transform: scale(0.93); }
+  .ctrl-btn:disabled { opacity: 0.25; cursor: default; transform: none; }
+
   #page-indicator {
-    color: rgba(255,255,255,0.7);
-    font-size: 13px;
-    letter-spacing: 0.05em;
-    min-width: 120px;
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    min-width: 110px;
     text-align: center;
   }
+
+  /* Loading screen */
   #loader {
     position: fixed;
     inset: 0;
-    background: #1a1a1a;
+    background: #111;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     z-index: 999;
-    gap: 18px;
-    transition: opacity 0.5s;
+    gap: 16px;
+    transition: opacity 0.6s ease;
   }
   #loader.hidden { opacity: 0; pointer-events: none; }
+
   .spinner {
-    width: 46px; height: 46px;
-    border: 4px solid rgba(255,255,255,0.15);
-    border-top-color: #fff;
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,255,255,0.12);
+    border-top-color: rgba(255,255,255,0.8);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: spin 0.75s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #loader p { color: rgba(255,255,255,0.6); font-size: 14px; letter-spacing: 0.06em; }
-  @media (max-width: 900px) {
-    body { justify-content: flex-start; padding-top: 20px; overflow-y: auto; }
+  #loader p { color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  @media (max-width: 700px) {
+    body { justify-content: flex-start; padding-top: 16px; overflow-y: auto; }
   }
 </style>
 </head>
 <body>
+
 <div id="loader">
   <div class="spinner"></div>
   <p>Loading book…</p>
 </div>
+
 <div id="book-container">
   <div id="flipbook-wrapper">
     <div id="flipbook"></div>
   </div>
   <div id="controls">
     <button class="ctrl-btn" id="btn-prev" title="Previous page">←</button>
-    <span id="page-indicator">Cover</span>
+    <span id="page-indicator">Front Cover</span>
     <button class="ctrl-btn" id="btn-next" title="Next page">→</button>
   </div>
 </div>
+
 <script>
 (function () {
   var BASE = 'https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
@@ -109,79 +124,96 @@
     pages.push(BASE + 'great_escape_2013_book_hi__Page_' + n + '.jpg');
   }
 
-  function bookSize() {
-    var maxH = window.innerHeight - 110;
-    var maxW = window.innerWidth  - 40;
-    var single = Math.min(maxH, Math.floor(maxW / 2), 520);
-    return single;
+  // One page is square: width == height
+  // In landscape mode (2 pages side by side), total canvas = 2 * pageSize
+  function calcSize() {
+    var vw = window.innerWidth;
+    var vh = window.innerHeight - 90; // leave room for controls
+    // We want two pages side by side: total spread width = 2 * pageSize
+    var byH = Math.floor(vh);
+    var byW = Math.floor(vw / 2);
+    var ps = Math.min(byH, byW, 460); // max page size 460px
+    ps = Math.max(ps, 140);
+    return ps;
   }
 
   var loaded = 0;
+  var total = pages.length;
+
   function preload(srcs, done) {
-    if (!srcs.length) { done(); return; }
     srcs.forEach(function(src) {
       var img = new Image();
-      img.onload = img.onerror = function() { if (++loaded === srcs.length) done(); };
+      img.onload = img.onerror = function() {
+        if (++loaded >= total) done();
+      };
       img.src = src;
     });
   }
 
   preload(pages, init);
 
+  var pageFlip;
+
   function init() {
     document.getElementById('loader').classList.add('hidden');
-    var s = bookSize();
-    var pageFlip = new St.PageFlip(
+
+    var ps = calcSize();
+
+    pageFlip = new St.PageFlip(
       document.getElementById('flipbook'),
       {
-        width:  s,
-        height: s,
+        width:  ps,
+        height: ps,
         size: 'fixed',
-        maxShadowOpacity: 0.6,
+        maxShadowOpacity: 0.7,
         showCover: true,
         mobileScrollSupport: false,
         useMouseEvents: true,
         drawShadow: true,
-        flippingTime: 700,
+        flippingTime: 800,
         startPage: 0,
-        autoSize: false
+        autoSize: false,
+        usePortrait: false
       }
     );
 
     pageFlip.loadFromImages(pages);
+    pageFlip.on('flip', updateUI);
+    pageFlip.on('init', updateUI);
 
     var btnPrev = document.getElementById('btn-prev');
     var btnNext = document.getElementById('btn-next');
-    var indicator = document.getElementById('page-indicator');
-    var total = pages.length;
 
-    function updateUI() {
-      var cur = pageFlip.getCurrentPageIndex();
-      btnPrev.disabled = (cur === 0);
-      btnNext.disabled = (cur >= total - 1);
-      if (cur === 0) {
-        indicator.textContent = 'Front Cover';
-      } else if (cur >= total - 1) {
-        indicator.textContent = 'Back Cover';
-      } else {
-        indicator.textContent = 'Page ' + cur + ' of ' + (total - 2);
-      }
-    }
-
-    pageFlip.on('flip', updateUI);
-    pageFlip.on('init', updateUI);
-    btnPrev.addEventListener('click', function() { pageFlip.flipPrev('bottom'); });
-    btnNext.addEventListener('click', function() { pageFlip.flipNext('bottom'); });
+    btnPrev.addEventListener('click', function() { pageFlip.flipPrev(); });
+    btnNext.addEventListener('click', function() { pageFlip.flipNext(); });
 
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') pageFlip.flipNext('bottom');
-      if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   pageFlip.flipPrev('bottom');
+      if (e.key === 'ArrowRight') pageFlip.flipNext();
+      if (e.key === 'ArrowLeft')  pageFlip.flipPrev();
     });
 
     window.addEventListener('resize', function() {
-      var ns = bookSize();
+      var ns = calcSize();
       pageFlip.update({ width: ns, height: ns });
     });
+  }
+
+  function updateUI() {
+    var cur = pageFlip.getCurrentPageIndex();
+    var btnPrev = document.getElementById('btn-prev');
+    var btnNext = document.getElementById('btn-next');
+    var indicator = document.getElementById('page-indicator');
+
+    btnPrev.disabled = (cur <= 0);
+    btnNext.disabled = (cur >= total - 1);
+
+    if (cur === 0) {
+      indicator.textContent = 'Front Cover';
+    } else if (cur >= total - 1) {
+      indicator.textContent = 'Back Cover';
+    } else {
+      indicator.textContent = 'Page ' + cur + ' of ' + (total - 2);
+    }
   }
 })();
 </script>
