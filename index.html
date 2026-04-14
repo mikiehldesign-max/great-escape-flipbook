@@ -63,7 +63,7 @@
     font-size: 12px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    min-width: 110px;
+    min-width: 130px;
     text-align: center;
   }
 
@@ -117,63 +117,82 @@
 
 <script>
 (function () {
+
+  /*
+   * Page layout:
+   *   Page 0  = front cover  (single, right side)
+   *   Pages 1-16 = interior  (shown as two-page spreads)
+   *   Page 17 = back cover   (single, left side)
+   *
+   * StPageFlip with showCover:true handles exactly this:
+   * the first and last images are rendered full-width as
+   * covers, everything in between is shown as a spread.
+   *
+   * The key is setting the PAGE size (not the spread size).
+   * StPageFlip draws each page at {width, height} and places
+   * two of them side-by-side automatically.  So we just need
+   * to size each page as a square that fits the viewport.
+   */
+
   var BASE = 'https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
   var pages = [];
   for (var i = 1; i <= 18; i++) {
     var n = String(i).padStart(2, '0');
     pages.push(BASE + 'great_escape_2013_book_hi__Page_' + n + '.jpg');
   }
+  var TOTAL = pages.length; // 18
 
-  // One page is square: width == height
-  // In landscape mode (2 pages side by side), total canvas = 2 * pageSize
-  function calcSize() {
-    var vw = window.innerWidth;
-    var vh = window.innerHeight - 90; // leave room for controls
-    // We want two pages side by side: total spread width = 2 * pageSize
-    var byH = Math.floor(vh);
-    var byW = Math.floor(vw / 2);
-    var ps = Math.min(byH, byW, 460); // max page size 460px
-    ps = Math.max(ps, 140);
-    return ps;
+  /* ---- sizing ---------------------------------------------------------- */
+  function calcPageSize() {
+    var vw = window.innerWidth  - 48;   // 24px padding each side
+    var vh = window.innerHeight - 100;  // room for controls + gap
+
+    // In spread mode the canvas is 2 * pageSize wide.
+    // Each page is square so height == pageSize.
+    var byW = Math.floor(vw / 2);  // half the available width
+    var byH = Math.floor(vh);       // full available height
+
+    var ps = Math.min(byW, byH, 500);
+    return Math.max(ps, 120);
   }
 
-  var loaded = 0;
-  var total = pages.length;
-
-  function preload(srcs, done) {
-    srcs.forEach(function(src) {
+  /* ---- preload all images, then init ------------------------------------ */
+  var loadedCount = 0;
+  function preload(done) {
+    pages.forEach(function(src) {
       var img = new Image();
       img.onload = img.onerror = function() {
-        if (++loaded >= total) done();
+        if (++loadedCount >= TOTAL) done();
       };
       img.src = src;
     });
   }
 
-  preload(pages, init);
+  preload(init);
 
+  /* ---- initialise flipbook --------------------------------------------- */
   var pageFlip;
 
   function init() {
     document.getElementById('loader').classList.add('hidden');
 
-    var ps = calcSize();
+    var ps = calcPageSize();
 
     pageFlip = new St.PageFlip(
       document.getElementById('flipbook'),
       {
-        width:  ps,
-        height: ps,
-        size: 'fixed',
-        maxShadowOpacity: 0.7,
-        showCover: true,
+        width:            ps,   // single-page width
+        height:           ps,   // single-page height (square pages)
+        size:             'fixed',
+        maxShadowOpacity: 0.65,
+        showCover:        true, // <-- first & last pages become single covers
+        usePortrait:      false,// <-- always use landscape (spread) layout
         mobileScrollSupport: false,
-        useMouseEvents: true,
-        drawShadow: true,
-        flippingTime: 800,
-        startPage: 0,
-        autoSize: false,
-        usePortrait: false
+        useMouseEvents:   true,
+        drawShadow:       true,
+        flippingTime:     900,
+        startPage:        0,
+        autoSize:         false
       }
     );
 
@@ -181,40 +200,48 @@
     pageFlip.on('flip', updateUI);
     pageFlip.on('init', updateUI);
 
-    var btnPrev = document.getElementById('btn-prev');
-    var btnNext = document.getElementById('btn-next');
+    /* buttons */
+    document.getElementById('btn-prev')
+      .addEventListener('click', function() { pageFlip.flipPrev(); });
+    document.getElementById('btn-next')
+      .addEventListener('click', function() { pageFlip.flipNext(); });
 
-    btnPrev.addEventListener('click', function() { pageFlip.flipPrev(); });
-    btnNext.addEventListener('click', function() { pageFlip.flipNext(); });
-
+    /* keyboard */
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'ArrowRight') pageFlip.flipNext();
-      if (e.key === 'ArrowLeft')  pageFlip.flipPrev();
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') pageFlip.flipNext();
+      if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   pageFlip.flipPrev();
     });
 
+    /* resize */
     window.addEventListener('resize', function() {
-      var ns = calcSize();
+      var ns = calcPageSize();
       pageFlip.update({ width: ns, height: ns });
     });
   }
 
+  /* ---- update controls label ------------------------------------------- */
   function updateUI() {
-    var cur = pageFlip.getCurrentPageIndex();
-    var btnPrev = document.getElementById('btn-prev');
-    var btnNext = document.getElementById('btn-next');
-    var indicator = document.getElementById('page-indicator');
+    var cur  = pageFlip.getCurrentPageIndex();
+    var btnP = document.getElementById('btn-prev');
+    var btnN = document.getElementById('btn-next');
+    var ind  = document.getElementById('page-indicator');
 
-    btnPrev.disabled = (cur <= 0);
-    btnNext.disabled = (cur >= total - 1);
+    btnP.disabled = (cur <= 0);
+    btnN.disabled = (cur >= TOTAL - 1);
 
     if (cur === 0) {
-      indicator.textContent = 'Front Cover';
-    } else if (cur >= total - 1) {
-      indicator.textContent = 'Back Cover';
+      ind.textContent = 'Front Cover';
+    } else if (cur >= TOTAL - 1) {
+      ind.textContent = 'Back Cover';
     } else {
-      indicator.textContent = 'Page ' + cur + ' of ' + (total - 2);
+      // Interior: StPageFlip flips in steps of 2, so cur is always odd
+      // for left pages.  Show it as a spread number.
+      var spread = Math.ceil(cur / 2);
+      var totalSpreads = Math.floor((TOTAL - 2) / 2);
+      ind.textContent = 'Spread ' + spread + ' of ' + totalSpreads;
     }
   }
+
 })();
 </script>
 </body>
