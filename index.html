@@ -27,34 +27,27 @@
   }
 
   /*
-   * #clip-box clips to pageSize (cover) or 2×pageSize (spread).
+   * #clip-box clips to pageSize (single cover) or 2×pageSize (spread).
    * #flipbook-wrapper holds the StPageFlip canvas (always 2×pageSize wide).
    *
-   * Canvas layout (landscape + showCover):
-   *   front cover → drawn on the RIGHT half of the canvas
+   * StPageFlip landscape canvas layout (showCover: true):
+   *   front cover → drawn on the RIGHT half  (canvas pixels ps..2ps)
    *   spreads     → drawn across the full canvas
-   *   back cover  → drawn on the LEFT  half of the canvas
+   *   back cover  → drawn on the LEFT  half  (canvas pixels 0..ps)
    *
-   * To show only the front cover:
-   *   clip-box = pageSize wide
-   *   wrapper  = translateX(-pageSize)  → right half scrolls into view
-   *
-   * To show a spread:
-   *   clip-box = 2×pageSize wide
-   *   wrapper  = translateX(0)          → full canvas visible
-   *
-   * To show only the back cover:
-   *   clip-box = pageSize wide
-   *   wrapper  = translateX(0)          → left half is the back cover
+   * setClip() rules:
+   *   front cover  → clipBox w=ps,    wrapper translateX(-ps)
+   *   spread       → clipBox w=2×ps,  wrapper translateX(0)
+   *   back cover   → clipBox w=ps,    wrapper translateX(0)
    */
   #clip-box {
     overflow: hidden;
     filter: drop-shadow(0 20px 50px rgba(0,0,0,0.9));
+    /* width/height/minWidth set by JS */
   }
   #flipbook-wrapper { display: block; }
   #flipbook         { display: block; }
 
-  /* Controls */
   #controls {
     display: flex;
     align-items: center;
@@ -65,8 +58,7 @@
     background: rgba(255,255,255,0.1);
     border: 1px solid rgba(255,255,255,0.2);
     color: #fff;
-    width: 40px;
-    height: 40px;
+    width: 40px; height: 40px;
     border-radius: 50%;
     font-size: 16px;
     cursor: pointer;
@@ -88,17 +80,12 @@
     text-align: center;
   }
 
-  /* Loading screen */
   #loader {
-    position: fixed;
-    inset: 0;
+    position: fixed; inset: 0;
     background: #111;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 999;
-    gap: 16px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 999; gap: 16px;
     transition: opacity 0.6s ease;
   }
   #loader.hidden { opacity: 0; pointer-events: none; }
@@ -110,12 +97,7 @@
     animation: spin 0.75s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #loader p {
-    color: rgba(255,255,255,0.45);
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
+  #loader p { color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
 
   @media (max-width: 700px) {
     body { justify-content: flex-start; padding-top: 16px; overflow-y: auto; overflow-x: hidden; }
@@ -124,10 +106,7 @@
 </head>
 <body>
 
-<div id="loader">
-  <div class="spinner"></div>
-  <p>Loading book…</p>
-</div>
+<div id="loader"><div class="spinner"></div><p>Loading book…</p></div>
 
 <div id="book-container">
   <div id="clip-box">
@@ -136,9 +115,9 @@
     </div>
   </div>
   <div id="controls">
-    <button class="ctrl-btn" id="btn-prev" title="Previous page">←</button>
+    <button class="ctrl-btn" id="btn-prev">←</button>
     <span id="page-indicator">Front Cover</span>
-    <button class="ctrl-btn" id="btn-next" title="Next page">→</button>
+    <button class="ctrl-btn" id="btn-next">→</button>
   </div>
 </div>
 
@@ -148,13 +127,11 @@
   var BASE  = 'https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
   var pages = [];
   for (var i = 1; i <= 18; i++) {
-    var n = String(i).padStart(2, '0');
-    pages.push(BASE + 'great_escape_2013_book_hi__Page_' + n + '.jpg');
+    pages.push(BASE + 'great_escape_2013_book_hi__Page_' + String(i).padStart(2,'0') + '.jpg');
   }
   var TOTAL    = pages.length; // 18
   var pageSize = 0;
 
-  /* ---- sizing ---- */
   function calcPageSize() {
     var vw = window.innerWidth  - 48;
     var vh = window.innerHeight - 100;
@@ -162,7 +139,6 @@
     return Math.max(ps, 120);
   }
 
-  /* ---- preload ---- */
   var loadedCount = 0;
   function preload(done) {
     pages.forEach(function(src) {
@@ -174,43 +150,35 @@
 
   preload(init);
 
-  /* ---- init ---- */
   var pageFlip;
 
   function init() {
     document.getElementById('loader').classList.add('hidden');
     pageSize = calcPageSize();
-
-    /* Initialise clip without animation */
     setClip(0, false);
 
-    pageFlip = new St.PageFlip(
-      document.getElementById('flipbook'),
-      {
-        width:               pageSize,
-        height:              pageSize,
-        size:                'fixed',
-        maxShadowOpacity:    0.65,
-        showCover:           true,
-        usePortrait:         false,
-        mobileScrollSupport: false,
-        useMouseEvents:      true,
-        drawShadow:          true,
-        flippingTime:        900,
-        startPage:           0,
-        autoSize:            false
-      }
-    );
+    pageFlip = new St.PageFlip(document.getElementById('flipbook'), {
+      width:               pageSize,
+      height:              pageSize,
+      size:                'fixed',
+      maxShadowOpacity:    0.65,
+      showCover:           true,
+      usePortrait:         false,
+      mobileScrollSupport: false,
+      useMouseEvents:      true,
+      drawShadow:          true,
+      flippingTime:        900,
+      startPage:           0,
+      autoSize:            false
+    });
 
     pageFlip.loadFromImages(pages);
     pageFlip.on('flip',        onFlip);
     pageFlip.on('changeState', onFlip);
     pageFlip.on('init',        onFlip);
 
-    document.getElementById('btn-prev')
-      .addEventListener('click', function() { pageFlip.flipPrev(); });
-    document.getElementById('btn-next')
-      .addEventListener('click', function() { pageFlip.flipNext(); });
+    document.getElementById('btn-prev').addEventListener('click', function() { pageFlip.flipPrev(); });
+    document.getElementById('btn-next').addEventListener('click', function() { pageFlip.flipNext(); });
 
     document.addEventListener('keydown', function(e) {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') pageFlip.flipNext();
@@ -224,53 +192,51 @@
     });
   }
 
-  /* ---- setClip ---- */
+  /* setClip: resize the clip-box and shift the wrapper */
   function setClip(cur, animate) {
     var clipBox = document.getElementById('clip-box');
     var wrapper = document.getElementById('flipbook-wrapper');
-    var T       = animate ? '0.55s cubic-bezier(0.4,0,0.2,1)' : '0s';
+    var T = animate ? '0.55s cubic-bezier(0.4,0,0.2,1)' : '0s';
+    var w, tx;
 
     if (cur === 0) {
-      /* Front cover: right half of canvas. Shift wrapper left so right half aligns. */
-      clipBox.style.width      = pageSize + 'px';
-      clipBox.style.height     = pageSize + 'px';
-      wrapper.style.transform  = 'translateX(-' + pageSize + 'px)';
+      /* Front cover lives on the RIGHT half of the canvas.
+         Shift the wrapper left by pageSize so the right half shows. */
+      w  = pageSize;
+      tx = -pageSize;
     } else if (cur >= TOTAL - 1) {
-      /* Back cover: left half of canvas. No shift needed. */
-      clipBox.style.width      = pageSize + 'px';
-      clipBox.style.height     = pageSize + 'px';
-      wrapper.style.transform  = 'translateX(0)';
+      /* Back cover lives on the LEFT half. No shift needed. */
+      w  = pageSize;
+      tx = 0;
     } else {
-      /* Interior spread: show full canvas. */
-      clipBox.style.width      = (pageSize * 2) + 'px';
-      clipBox.style.height     = pageSize + 'px';
-      wrapper.style.transform  = 'translateX(0)';
+      /* Interior spread: show full 2×pageSize canvas. */
+      w  = pageSize * 2;
+      tx = 0;
     }
 
-    clipBox.style.transition  = 'width '     + T + ', height ' + T;
-    wrapper.style.transition  = 'transform ' + T;
+    clipBox.style.transition = 'width ' + T + ', min-width ' + T;
+    clipBox.style.width      = w + 'px';
+    clipBox.style.minWidth   = w + 'px';   /* <-- prevents flex shrink */
+    clipBox.style.height     = pageSize + 'px';
+
+    wrapper.style.transition = 'transform ' + T;
+    wrapper.style.transform  = 'translateX(' + tx + 'px)';
   }
 
-  /* ---- onFlip ---- */
   function onFlip() {
     var cur  = pageFlip.getCurrentPageIndex();
-    var btnP = document.getElementById('btn-prev');
-    var btnN = document.getElementById('btn-next');
-    var ind  = document.getElementById('page-indicator');
-
-    btnP.disabled = (cur <= 0);
-    btnN.disabled = (cur >= TOTAL - 1);
+    document.getElementById('btn-prev').disabled = (cur <= 0);
+    document.getElementById('btn-next').disabled = (cur >= TOTAL - 1);
 
     setClip(cur, true);
 
+    var ind = document.getElementById('page-indicator');
     if (cur === 0) {
       ind.textContent = 'Front Cover';
     } else if (cur >= TOTAL - 1) {
       ind.textContent = 'Back Cover';
     } else {
-      var spread       = Math.ceil(cur / 2);
-      var totalSpreads = Math.floor((TOTAL - 2) / 2);
-      ind.textContent  = 'Spread ' + spread + ' of ' + totalSpreads;
+      ind.textContent = 'Spread ' + Math.ceil(cur / 2) + ' of ' + Math.floor((TOTAL - 2) / 2);
     }
   }
 
