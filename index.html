@@ -26,9 +26,28 @@
     gap: 20px;
   }
 
+  /*
+   * The flipbook canvas is always 2×pageSize wide (landscape mode).
+   * On the cover/back-cover we shift it so only the right (or left)
+   * half is visible – making the single cover page appear centred.
+   * The wrapper clips to exactly one page width.
+   */
   #flipbook-wrapper {
+    /* overflow hidden + exact page-width clips the blank half */
+    overflow: visible; /* we use translate instead of clip */
     filter: drop-shadow(0 20px 50px rgba(0,0,0,0.9));
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  /*
+   * .is-cover  → translate right by 25% of the canvas (= half a page)
+   *              so the right-side cover is centred in the viewport
+   * .is-back   → translate left  by 25% (back cover is on the left)
+   * .is-spread → no translation
+   */
+  #flipbook-wrapper.is-cover  { transform: translateX(25%);  }
+  #flipbook-wrapper.is-back   { transform: translateX(-25%); }
+  #flipbook-wrapper.is-spread { transform: translateX(0);    }
 
   #flipbook { display: block; }
 
@@ -54,7 +73,7 @@
     align-items: center;
     justify-content: center;
   }
-  .ctrl-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.08); }
+  .ctrl-btn:hover  { background: rgba(255,255,255,0.2); transform: scale(1.08); }
   .ctrl-btn:active { transform: scale(0.93); }
   .ctrl-btn:disabled { opacity: 0.25; cursor: default; transform: none; }
 
@@ -90,10 +109,15 @@
     animation: spin 0.75s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #loader p { color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+  #loader p {
+    color: rgba(255,255,255,0.45);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
 
   @media (max-width: 700px) {
-    body { justify-content: flex-start; padding-top: 16px; overflow-y: auto; }
+    body { justify-content: flex-start; padding-top: 16px; overflow-y: auto; overflow-x: hidden; }
   }
 </style>
 </head>
@@ -105,7 +129,7 @@
 </div>
 
 <div id="book-container">
-  <div id="flipbook-wrapper">
+  <div id="flipbook-wrapper" class="is-cover">
     <div id="flipbook"></div>
   </div>
   <div id="controls">
@@ -119,22 +143,17 @@
 (function () {
 
   /*
-   * Page layout:
-   *   Page 0  = front cover  (single, right side)
-   *   Pages 1-16 = interior  (shown as two-page spreads)
-   *   Page 17 = back cover   (single, left side)
+   * Page order (18 pages total):
+   *   [0]      front cover  → shown alone on the right  (is-cover)
+   *   [1..16]  interior     → shown as two-page spreads  (is-spread)
+   *   [17]     back cover   → shown alone on the left    (is-back)
    *
-   * StPageFlip with showCover:true handles exactly this:
-   * the first and last images are rendered full-width as
-   * covers, everything in between is shown as a spread.
-   *
-   * The key is setting the PAGE size (not the spread size).
-   * StPageFlip draws each page at {width, height} and places
-   * two of them side-by-side automatically.  So we just need
-   * to size each page as a square that fits the viewport.
+   * StPageFlip with showCover:true + usePortrait:false gives us the
+   * spread layout.  The canvas is always 2×pageSize wide.
+   * We shift it via CSS to visually centre single-page covers.
    */
 
-  var BASE = 'https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
+  var BASE  = 'https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
   var pages = [];
   for (var i = 1; i <= 18; i++) {
     var n = String(i).padStart(2, '0');
@@ -144,19 +163,15 @@
 
   /* ---- sizing ---------------------------------------------------------- */
   function calcPageSize() {
-    var vw = window.innerWidth  - 48;   // 24px padding each side
-    var vh = window.innerHeight - 100;  // room for controls + gap
-
-    // In spread mode the canvas is 2 * pageSize wide.
-    // Each page is square so height == pageSize.
-    var byW = Math.floor(vw / 2);  // half the available width
-    var byH = Math.floor(vh);       // full available height
-
-    var ps = Math.min(byW, byH, 500);
+    var vw = window.innerWidth  - 48;
+    var vh = window.innerHeight - 100;
+    var byW = Math.floor(vw / 2);
+    var byH = Math.floor(vh);
+    var ps  = Math.min(byW, byH, 500);
     return Math.max(ps, 120);
   }
 
-  /* ---- preload all images, then init ------------------------------------ */
+  /* ---- preload --------------------------------------------------------- */
   var loadedCount = 0;
   function preload(done) {
     pages.forEach(function(src) {
@@ -170,7 +185,7 @@
 
   preload(init);
 
-  /* ---- initialise flipbook --------------------------------------------- */
+  /* ---- init ------------------------------------------------------------ */
   var pageFlip;
 
   function init() {
@@ -181,65 +196,72 @@
     pageFlip = new St.PageFlip(
       document.getElementById('flipbook'),
       {
-        width:            ps,   // single-page width
-        height:           ps,   // single-page height (square pages)
-        size:             'fixed',
-        maxShadowOpacity: 0.65,
-        showCover:        true, // <-- first & last pages become single covers
-        usePortrait:      false,// <-- always use landscape (spread) layout
+        width:               ps,
+        height:              ps,
+        size:                'fixed',
+        maxShadowOpacity:    0.65,
+        showCover:           true,
+        usePortrait:         false,
         mobileScrollSupport: false,
-        useMouseEvents:   true,
-        drawShadow:       true,
-        flippingTime:     900,
-        startPage:        0,
-        autoSize:         false
+        useMouseEvents:      true,
+        drawShadow:          true,
+        flippingTime:        900,
+        startPage:           0,
+        autoSize:            false
       }
     );
 
     pageFlip.loadFromImages(pages);
-    pageFlip.on('flip', updateUI);
-    pageFlip.on('init', updateUI);
+    pageFlip.on('flip',     onFlip);
+    pageFlip.on('changeState', onFlip);
+    pageFlip.on('init',     onFlip);
 
-    /* buttons */
     document.getElementById('btn-prev')
       .addEventListener('click', function() { pageFlip.flipPrev(); });
     document.getElementById('btn-next')
       .addEventListener('click', function() { pageFlip.flipNext(); });
 
-    /* keyboard */
     document.addEventListener('keydown', function(e) {
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') pageFlip.flipNext();
       if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   pageFlip.flipPrev();
     });
 
-    /* resize */
     window.addEventListener('resize', function() {
       var ns = calcPageSize();
       pageFlip.update({ width: ns, height: ns });
     });
   }
 
-  /* ---- update controls label ------------------------------------------- */
-  function updateUI() {
-    var cur  = pageFlip.getCurrentPageIndex();
-    var btnP = document.getElementById('btn-prev');
-    var btnN = document.getElementById('btn-next');
-    var ind  = document.getElementById('page-indicator');
+  /* ---- flip / state handler ------------------------------------------- */
+  function onFlip() {
+    var cur     = pageFlip.getCurrentPageIndex();
+    var wrapper = document.getElementById('flipbook-wrapper');
+    var btnP    = document.getElementById('btn-prev');
+    var btnN    = document.getElementById('btn-next');
+    var ind     = document.getElementById('page-indicator');
 
     btnP.disabled = (cur <= 0);
     btnN.disabled = (cur >= TOTAL - 1);
 
+    /* Cover state */
     if (cur === 0) {
-      ind.textContent = 'Front Cover';
-    } else if (cur >= TOTAL - 1) {
-      ind.textContent = 'Back Cover';
-    } else {
-      // Interior: StPageFlip flips in steps of 2, so cur is always odd
-      // for left pages.  Show it as a spread number.
-      var spread = Math.ceil(cur / 2);
-      var totalSpreads = Math.floor((TOTAL - 2) / 2);
-      ind.textContent = 'Spread ' + spread + ' of ' + totalSpreads;
+      wrapper.className = 'is-cover';
+      ind.textContent   = 'Front Cover';
+      return;
     }
+
+    /* Back-cover state */
+    if (cur >= TOTAL - 1) {
+      wrapper.className = 'is-back';
+      ind.textContent   = 'Back Cover';
+      return;
+    }
+
+    /* Interior spread */
+    wrapper.className = 'is-spread';
+    var spread       = Math.ceil(cur / 2);
+    var totalSpreads = Math.floor((TOTAL - 2) / 2);
+    ind.textContent  = 'Spread ' + spread + ' of ' + totalSpreads;
   }
 
 })();
