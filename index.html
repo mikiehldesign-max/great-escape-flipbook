@@ -1,111 +1,249 @@
 <!DOCTYPE html>
 <html lang="en">
- <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>The Great Escape – Interactive Book</title>
- <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
- <style>
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  body{background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;fonht-family:Georgia,serif;overflow:visible}
-  #book-container{display:flex;flex-direction:column;align-items:center;gap:20px}
-  /* #flipbook-wrapper is our clip/viewport window. width, height, overflow set by JS.
-     #flipbook (which StPageFlip targets) is shifted inside it. */
-  #flipbook-wrapper{filter:drop-shadow(0 20px 50px rgba(0,0,0,.25))}
-  #flipbook{display:block;position:relative}
-  #controls{display:flex;align-items:center;gap:16px;user-select:none}
-  .ctrl-btn{background:rgba(0,0,0,.08);border:1px solid rgba(0,0,0,.18);color:#333;width:40px;height:40px;border-radius:50%;font-size:16px;cursor:pointer;transition:background .2s,transform .15s;display:flex;align-items:center;justify-content:center}
-  .ctrl-btn:hover{background:rgba(0,0,0,.16);transform:scale(1.08)}
-  .ctrl-btn:active{transform:scale(.93)}
-  .ctrl-btn:disabled{opacity:.25;cursor:default;transform:none}
-  #page-indicator{color:rgba(0,0,0,.5);font-size:12px;letter-spacing:.08em;text-transform:uppercase;min-width:130px;text-align:center}
-  #loader{position:fixed;inset:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px;transition:opacity .6s ease}
-  #loader.hidden{opacity:0;pointer-events:none}
-  .spinner{width:40px;height:40px;border:3px solid rgba(0,0,0,.12);border-top-color:rgba(0,0,0,.6);border-radius:50%;animation:spin .75s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  #loader p{color:rgba(0,0,0,.45);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
-  @media(max-width:700px){body{justify-content:flex-start;padding-top:16px;overflow-y:auto;overflow-x:hidden}}
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Great Escape 2013</title>
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      padding: 20px 16px 40px;
+    }
+
+    #gef-root {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+
+    #clip-window {
+      overflow: hidden;
+      position: relative;
+    }
+
+    #flipbook-container {
+      position: relative;
+    }
+
+    #nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .ctrl-btn {
+      background: #1a1a1a;
+      color: #ffffff;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .ctrl-btn:hover { background: #444; }
+
+    #page-indicator {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1a1a1a;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      min-width: 160px;
+      text-align: center;
+    }
   </style>
- </head>
- <body>
-  <div id="loader"><div class="spinner"></div>div><p>Loading book…</p></div>div>
- <div id="book-container">
-   <div id="flipbook-wrapper">
-       <div id="flipbook"></div>div>
-   </div>div>
-   <div id="controls">
-       <button class="ctrl-btn" id="btn-prev">←</button>button>
-       <span id="page-indicator">Front Cover</span>span>
-       <button class="ctrl-btn" id="btn-next">→</button>button>
-   </div>div>
- </div>div>
- <script>
-  (function(){
-     var BASE='https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
-     var pages=[];
-     for(var i=1;i<=18;i++) pages.push(BASE+'great_escape_2013_book_hi__Page_'+String(i).padStart(2,'0')+'.jpg');
-     var TOTAL=pages.length, ps=0, pf;
-     function calcPs(){
-          var ps=Math.min(Math.floor((window.innerWidth-48)/2),Math.floor(window.innerHeight-100),500);
-          return Math.max(ps,120);
-     }
-     function applyView(cur, animate){
-          var wr=document.getElementById('flipbook-wrapper');
-          var fb=document.getElementById('flipbook');
-          var T=animate?'0.6s cubic-bezier(0.4,0,0.2,1)':'0s';
-          var w, tx;
-          if(cur===0){w=ps; tx=-ps;}
-          else if(cur>=TOTAL-1){w=ps; tx=0;}
-          else{w=ps*2; tx=0;}
-          wr.style.overflow='hidden';
-          wr.style.transition='width '+T;
-          wr.style.width=w+'px';
-          wr.style.height=ps+'px';
-          fb.style.transition='transform '+T;
-          fb.style.transform='translateX('+tx+'px)';
-     }
-     var n=0;
-     function preload(done){pages.forEach(function(s){var img=new Image();img.onload=img.onerror=function(){if(++n>=TOTAL)done();};img.src=s;});}
-     preload(function(){
-          document.getElementById('loader').classList.add('hidden');
-          ps=calcPs();
-          applyView(0,false);
-          pf=new St.PageFlip(document.getElementById('flipbook'),{
-                 width:ps,height:ps,size:'fixed',maxShadowOpacity:.65,
-                 showCover:true,usePortrait:false,mobileScrollSupport:false,
-                 useMouseEvents:true,drawShadow:true,flippingTime:900,startPage:0,autoSize:false
-          });
-          pf.loadFromImages(pages);
-          pf.on('flip',onFlip);
-          pf.on('changeState',onFlip);
-          pf.on('init',onFlip);
-          document.getElementById('btn-prev').addEventListener('click',function(){pf.flipPrev();});
-          document.getElementById('btn-next').addEventListener('click',function(){pf.flipNext();});
-          document.addEventListener('keydown',function(e){
-                 if(e.key==='ArrowRight'||e.key==='ArrowDown')pf.flipNext();
-                 if(e.key==='ArrowLeft'||e.key==='ArrowUp')pf.flipPrev();
-          });
-          window.addEventListener('resize',function(){
-                 ps=calcPs();
-                 pf.update({width:ps,height:ps});
-                 applyView(pf.getCurrentPageIndex(),false);
-          });
-     });
-     function onFlip(){
-          var cur=pf.getCurrentPageIndex();
-          document.getElementById('btn-prev').disabled=(cur<=0);
-          document.getElementById('btn-next').disabled=(cur>=TOTAL-1);
-          applyView(cur,true);
-          var ind=document.getElementById('page-indicator');
-          if(cur===0)ind.textContent='Front Cover';
-          else if(cur>=TOTAL-1)ind.textContent='Back Cover';
-          else ind.textContent='Spread '+Math.ceil(cur/2)+' of '+Math.floor((TOTAL-2)/2);
-     }
-  })();
- </script>
- </body>
-</html>html>
- </script></p>
- </body>
- </style></title>
- </head>
+</head>
+<body>
+  <div id="gef-root">
+    <div id="clip-window">
+      <div id="flipbook-container"></div>
+    </div>
+    <div id="nav-bar">
+      <button class="ctrl-btn" id="btn-prev">&#8592;</button>
+      <span id="page-indicator">LOADING...</span>
+      <button class="ctrl-btn" id="btn-next">&#8594;</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var BASE = 'https://raw.githubusercontent.com/mikiehldesign-max/Great-Escape-OLD/main/';
+      var TOTAL_PAGES = 18;
+      var flipbook = null;
+      var currentPage = 0;
+      var resizeTimer = null;
+
+      function pad(n) {
+        return n < 10 ? '0' + n : '' + n;
+      }
+
+      function imgUrl(n) {
+        return BASE + 'great_escape_2013_book_hi__Page_' + pad(n) + '.jpg';
+      }
+
+      function calcPs() {
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var mobile = vw <= 700;
+        var container = document.getElementById('gef-root');
+        var cw = container ? container.offsetWidth : vw;
+
+        if (mobile) {
+          return Math.min(cw - 32, vh - 140);
+        } else {
+          return Math.min((cw * 0.95) / 2, vh * 0.85);
+        }
+      }
+
+      function isMobile() {
+        return window.innerWidth <= 700;
+      }
+
+      function updateIndicator(page) {
+        var ind = document.getElementById('page-indicator');
+        if (!ind) return;
+        if (page === 0) {
+          ind.textContent = '\u2190 FRONT COVER \u2192';
+        } else if (page >= TOTAL_PAGES - 1) {
+          ind.textContent = '\u2190 BACK COVER \u2192';
+        } else {
+          var spread = Math.ceil(page / 2);
+          var totalSpreads = Math.floor((TOTAL_PAGES - 2) / 2);
+          ind.textContent = '\u2190 SPREAD ' + spread + ' OF ' + totalSpreads + ' \u2192';
+        }
+      }
+
+      function applyView(pageNum, animate, ps) {
+        var clip = document.getElementById('clip-window');
+        var mobile = isMobile();
+        var w, h;
+
+        if (mobile) {
+          w = ps;
+          h = ps * 1.294;
+        } else {
+          if (pageNum === 0 || pageNum >= TOTAL_PAGES - 1) {
+            w = ps;
+            h = ps * 1.294;
+          } else {
+            w = ps * 2;
+            h = ps * 1.294;
+          }
+        }
+
+        if (clip) {
+          clip.style.width = w + 'px';
+          clip.style.height = h + 'px';
+        }
+      }
+
+      function initFlipbook(startPage) {
+        var container = document.getElementById('flipbook-container');
+        if (!container) return;
+
+        // Destroy existing instance
+        if (flipbook) {
+          try { flipbook.destroy(); } catch (e) {}
+          flipbook = null;
+        }
+        container.innerHTML = '';
+
+        var ps = calcPs();
+        var mobile = isMobile();
+
+        applyView(startPage || 0, false, ps);
+
+        var usePortrait = mobile;
+
+        var config = {
+          width: ps,
+          height: ps * 1.294,
+          size: 'fixed',
+          minWidth: ps,
+          maxWidth: ps,
+          minHeight: ps * 1.294,
+          maxHeight: ps * 1.294,
+          drawShadow: true,
+          flippingTime: 600,
+          usePortrait: usePortrait,
+          startPage: startPage || 0,
+          autoSize: false,
+          maxShadowOpacity: 0.4,
+          showCover: true,
+          mobileScrollSupport: false
+        };
+
+        flipbook = new St.PageFlip(container, config);
+
+        var imgs = [];
+        for (var i = 1; i <= TOTAL_PAGES; i++) {
+          imgs.push(imgUrl(i));
+        }
+
+        flipbook.loadFromImages(imgs);
+
+        flipbook.on('flip', function (e) {
+          currentPage = e.data;
+          var ps2 = calcPs();
+          applyView(currentPage, true, ps2);
+          updateIndicator(currentPage);
+        });
+
+        flipbook.on('changeState', function (e) {
+          currentPage = flipbook.getCurrentPageIndex();
+          updateIndicator(currentPage);
+        });
+
+        updateIndicator(startPage || 0);
+      }
+
+      function onResize() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+          var saved = currentPage;
+          initFlipbook(saved);
+        }, 250);
+      }
+
+      // Wire up buttons
+      document.getElementById('btn-prev').addEventListener('click', function () {
+        if (flipbook) flipbook.flipPrev();
+      });
+
+      document.getElementById('btn-next').addEventListener('click', function () {
+        if (flipbook) flipbook.flipNext();
+      });
+
+      // Keyboard navigation
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowLeft' && flipbook) flipbook.flipPrev();
+        if (e.key === 'ArrowRight' && flipbook) flipbook.flipNext();
+      });
+
+      window.addEventListener('resize', onResize);
+
+      // Init
+      initFlipbook(0);
+    })();
+  </script>
+</body>
+</html>
